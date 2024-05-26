@@ -1,0 +1,10 @@
+
+œcsharpsquid:S3776I"RRefactor this method to reduce its Cognitive Complexity from 23 to the 15 allowed.(Œ†§§8ˆİÖù1J$139cb556-5476-49d0-b3df-b3502ecb0c49
+µcsharpsquid:S2583f"fChange this condition so that it does not always evaluate to 'False'. Some code paths are unreachable.(“Ô¼ùÿÿÿÿ8ˆİÖù1J$6fa7d05e-43cc-4ec0-9b4e-9ce3f2504ad0
+°csharpsquid:S2583g"fChange this condition so that it does not always evaluate to 'False'. Some code paths are unreachable.(îæ¿°8ˆİÖù1J$52d126f4-4a4a-46c9-affd-d45822592f40
+°csharpsquid:S2583o"fChange this condition so that it does not always evaluate to 'False'. Some code paths are unreachable.(¦Áöİ8ˆİÖù1J$72d852d9-7b47-442b-952e-bac53a687642
+°csharpsquid:S2583p"fChange this condition so that it does not always evaluate to 'False'. Some code paths are unreachable.(îæ¿°8ˆİÖù1J$e7799469-b150-4d2f-908d-0dd7e8135d86
+±csharpsquid:S2583Š"fChange this condition so that it does not always evaluate to 'False'. Some code paths are unreachable.(Êˆ»Ø8ˆİÖù1J$a4614af2-0a1d-49d7-9a8e-9f2a72e01f20
+±csharpsquid:S2583“"fChange this condition so that it does not always evaluate to 'False'. Some code paths are unreachable.(Ÿ˜‰Œ8‰İÖù1J$6db3a8af-c098-4f99-993c-2936edf7f9fc
+•csharpsquid:S2589¡"EChange this condition so that it does not always evaluate to 'False'.(Õ™Ù»üÿÿÿÿ8‰İÖù1J$ab6ade55-2409-4a31-89e4-465fd77959fb
+‰csharpsquid:S1075"?Refactor your code not to use hardcoded absolute paths or URIs.(¸åÓ 8‰İÖù1J$965b60ae-98e9-4683-843c-deb142baf2c5
