@@ -1,4 +1,6 @@
-﻿using System.Diagnostics;
+﻿using System.Data;
+using System.Data.SqlClient;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 
@@ -145,6 +147,8 @@ public class Database
             prepCommand.Parameters.Add("@i" + i, SqliteType.Integer);
             prepCommand.Parameters.Add("@n" + i, SqliteType.Text);
         }
+
+        prepCommand.CommandText = sbPrep.ToString();
         
         for (var ci = 0; ci < chunks.Count; ci++)
         {
@@ -174,7 +178,7 @@ public class Database
             }
         }
 
-        StopTimer($"Insert all seeders with params and chunk size {chunkSize}");
+        StopTimer($"Insert all seeders with chunk size {chunkSize}");
     }
     
     public void LoadTopicsByChunksWithParameter(int chunkSize)
@@ -190,6 +194,8 @@ public class Database
         sbPrep.Append("INSERT INTO main.Topics (id, forum_id, name, info_hash, seeders, size, status, reg_time, seeders_updates_today, seeders_updates_days, keeping_priority, poster, seeder_last_seen) VALUES ");
         sbPrep.AppendJoin(",", Enumerable.Range(0, chunkSize).Select(i => $"(@id{i}, @fid{i}, @na{i}, @ih{i}, @se{i}, @si{i}, @st{i}, @re{i}, @sut{i}, @sud{i}, @kp{i}, @po{i}, @sls{i})"));
         sbPrep.Append(";");
+
+        prepCommand.CommandText = sbPrep.ToString();
         
         for (var i = 0; i < chunkSize; i++)
         {

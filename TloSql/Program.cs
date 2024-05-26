@@ -18,8 +18,8 @@ var db = new Database();
 
 var chunkSize = 10_000;
 
-db.LoadSeedersByChunksWithParameter(chunkSize);
-db.LoadTopicsByChunksWithParameter(chunkSize);
+db.LoadSeedersByChunks(chunkSize);
+db.LoadTopicsByChunks(chunkSize);
 
 
 db.Close();
