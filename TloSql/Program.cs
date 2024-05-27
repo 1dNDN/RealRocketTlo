@@ -7,19 +7,18 @@ using Microsoft.EntityFrameworkCore;
 
 using TloSql;
 
-var sums = new SubsectionsClassic();
+// var sums = new SubsectionsClassic();
 
 
 Stopwatch stopwatch = new Stopwatch();
 stopwatch.Start();
 // await sums.Read(true);
 
-var db = new Database();
+var db = new DatabaseLowLvl();
 
-var chunkSize = 10_000;
 
-db.LoadSeedersByChunks(chunkSize);
-db.LoadTopicsByChunks(chunkSize);
+db.LoadSeedersByChunksWithParameter();
+db.LoadTopicsByChunksWithParameter();
 
 
 db.Close();

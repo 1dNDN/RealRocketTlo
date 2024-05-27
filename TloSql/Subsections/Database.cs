@@ -37,7 +37,7 @@ public class Database
         _connection.Open();
         
         var command = _connection.CreateCommand();
-        command.CommandText = "PRAGMA synchronous=OFF; PRAGMA journal_mode=OFF; PRAGMA count_changes=OFF; PRAGMA temp_store=OFF; PRAGMA page_size=65536; PRAGMA cache_size=-16777216;locking_mode = EXCLUSIVE;";
+        command.CommandText = "PRAGMA synchronous=OFF; PRAGMA journal_mode=OFF; PRAGMA count_changes=OFF; PRAGMA temp_store=OFF; PRAGMA page_size=65536; PRAGMA cache_size=-16777216; PRAGMA locking_mode = EXCLUSIVE;";
         command.ExecuteNonQuery();
         
         Begin();
