@@ -1,53 +1,51 @@
-﻿using System.Diagnostics;
-using System.Text;
+﻿using System.Text;
+
+using NativeTloLibrary.Models;
 
 using SQLitePCL;
 
-namespace TloSql;
+namespace NativeTloLibrary.Database;
 
+/// <summary>
+///     Обертка вокруг низкоуровневого биндинга SQLITE
+/// </summary>
 public class DatabaseLowLvl
 {
+    // Поддержка многопоточности даже не в планах
+    // Все взаимодействие строго синхронное
+
+    // Запрос выполняется так:
+    // ConstructStatement();
+    // BindParams();
+    // ExecBindedStatement();
+
     private sqlite3 _connection;
 
-    private Stopwatch _stopwatch = new Stopwatch();
 
-    /// <summary>
-    /// Сбрасывает и перезапускает таймер
-    /// </summary>
-    private void StartTimer()
-    {
-        _stopwatch.Reset();
-        _stopwatch.Start();
-    }
 
-    /// <summary>
-    /// Останавливает таймер и пишет в консоль буквы
-    /// </summary>
-    /// <param name="text">Буквы которые писать</param>
-    private void StopTimer(string text)
+    public DatabaseLowLvl(string path)
     {
-        _stopwatch.Stop();
-        Console.WriteLine($"{text} {_stopwatch.Elapsed}");
-    }
+        raw.SetProvider(new SQLite3Provider_e_sqlite3());
 
-    public DatabaseLowLvl()
-    {
-        SQLitePCL.raw.SetProvider(new SQLite3Provider_e_sqlite3());
-        
-        OpenDb();
+        OpenDb(path);
 
         SetPragmas();
 
         BeginTransaction();
 
-        StartTimer();
-        
+        Speedometer.Start();
+
+        //TODO: Удолить, грешно
         Truncate("main.Topics");
         Truncate("main.KeepersSeeders");
-        
-        StopTimer("Clear all table");
+
+        Speedometer.Stop("Clear all table");
     }
 
+    /// <summary>
+    ///     Выполнить SQL запрос
+    /// </summary>
+    /// <param name="sql">Текст SQL запроса</param>
     private void ExecuteSql(string sql)
     {
         var rc = raw.sqlite3_exec(_connection, sql);
@@ -58,7 +56,7 @@ public class DatabaseLowLvl
     private sqlite3_stmt PrepareStatement(string sql)
     {
         var rc = raw.sqlite3_prepare_v2(_connection, sql, out var stmt);
-        
+
         CheckRc(rc);
 
         return stmt;
@@ -69,65 +67,85 @@ public class DatabaseLowLvl
         var rc = raw.sqlite3_bind_int(stmt, index, value);
         CheckRc(rc);
     }
-    
+
     private void Bind(sqlite3_stmt stmt, int index, long value)
     {
         var rc = raw.sqlite3_bind_int64(stmt, index, value);
         CheckRc(rc);
     }
-    
+
     private void Bind(sqlite3_stmt stmt, int index, string value)
     {
         var rc = raw.sqlite3_bind_text(stmt, index, value);
         CheckRc(rc);
     }
 
-    private void OpenDb()
+    private void OpenDb(string path)
     {
-        var rc = raw.sqlite3_open("C:\\Games\\webtlo-win-2.6.0-beta1\\webtlo-win\\nginx\\wtlo\\data\\webtlofordotnet.db", out _connection);
-        
+        var rc = raw.sqlite3_open(path, out _connection);
+
         CheckRc(rc);
     }
-    
+
     private void CheckRc(int rc)
     {
         if (rc != raw.SQLITE_OK && rc != raw.SQLITE_DONE)
-            throw new Exception(rc.ToString() + raw.sqlite3_errmsg(_connection).utf8_to_string());
+            throw new Exception(rc + raw.sqlite3_errmsg(_connection).utf8_to_string());
     }
-    
-    // public void LoadSeedersByChunksWithParameter()
-    // {
-    //     StartTimer();
-    //
-    //     var chunkSize = 32766 / 3;
-    //
-    //     var chunks = ChunkArray(_seeders, chunkSize);
-    //
-    //     var sql = "INSERT INTO main.KeepersSeeders (topic_id, keeper_id, keeper_name) VALUES ";
-    //     var paramsPart = "(?, ?, ?),";
-    //
-    //     ConstructStatement(chunkSize, sql, paramsPart, out var stmt);
-    //
-    //     for (var i = 0; i < chunks.Count; i++)
-    //     {
-    //         if (i == chunks.Count - 1)
-    //         {
-    //             ConstructStatement(chunks[i].Length, sql, paramsPart, out var stmtLast);
-    //
-    //             BindSeederParams(chunks, i, stmtLast);
-    //
-    //             ExecBindedStatement(stmtLast);
-    //         }
-    //         else
-    //         {
-    //             BindSeederParams(chunks, i, stmt);
-    //
-    //             ExecBindedStatement(stmt);
-    //         }
-    //     }
-    //
-    //     StopTimer($"Insert all seeders with chunk size {chunkSize}");
-    // }
+
+    /// <summary>
+    ///     Грузит что угодно в бд
+    /// </summary>
+    /// <param name="data">Данные</param>
+    /// <param name="tableName">Название таблицы, например <c>main.KeepersSeeders</c></param>
+    /// <param name="columns">Столбцы, например <c>(topic_id, keeper_id, keeper_name)</c></param>
+    /// <param name="countOfColumns">Число столбцов, например <c>3</c></param>
+    /// <typeparam name="T">Чота</typeparam>
+    public void LoadAnythingByChunksWithParameter<T>(T[] data, string tableName, string columns, Action<List<T[]>, int, sqlite3_stmt> bindSeederParamsFunc)
+    {
+        Speedometer.Start();
+
+        var countOfColumns = columns.Split(',').Length;
+
+        var chunkSize = 32766 / countOfColumns;
+
+        var chunks = ChunkArray(data, chunkSize);
+
+        var sql = $"INSERT INTO {tableName} {columns} VALUES ";
+        var paramsPart = "(";
+
+        for (var i = 0; i < countOfColumns - 1; i++)
+            paramsPart += "?, ";
+
+        paramsPart += "?),";
+
+        ConstructStatement(chunkSize, sql, paramsPart, out var stmt);
+
+        for (var i = 0; i < chunks.Count; i++)
+            if (i == chunks.Count - 1)
+            {
+                ConstructStatement(chunks[i].Length, sql, paramsPart, out var stmtLast);
+
+                bindSeederParamsFunc(chunks, i, stmtLast);
+
+                ExecBindedStatement(stmtLast);
+            }
+            else
+            {
+                bindSeederParamsFunc(chunks, i, stmt);
+
+                ExecBindedStatement(stmt);
+            }
+
+        Speedometer.Stop($"Insert all {tableName} with chunk size {chunkSize}");
+
+    }
+
+    public void LoadSeedersByChunksWithParameter(KeepersSeeder[] seeders) =>
+        LoadAnythingByChunksWithParameter(seeders, "main.KeepersSeeders", "(topic_id, keeper_id, keeper_name)", BindParams);
+
+    public void LoadTopicsByChunksWithParameter(Topic[] topics) =>
+        LoadAnythingByChunksWithParameter(topics, "main.Topics", "(id, forum_id, name, info_hash, seeders, size, status, reg_time, seeders_updates_today, seeders_updates_days, keeping_priority, poster, seeder_last_seen)", BindParams);
 
     private void ExecBindedStatement(sqlite3_stmt stmt)
     {
@@ -135,11 +153,11 @@ public class DatabaseLowLvl
         CheckRc(rc);
         rc = raw.sqlite3_clear_bindings(stmt);
         CheckRc(rc);
-        rc =  raw.sqlite3_reset(stmt);
+        rc = raw.sqlite3_reset(stmt);
         CheckRc(rc);
     }
 
-    private void BindSeederParams(List<KeepersSeeder[]> chunks, int ci, sqlite3_stmt stmt)
+    private void BindParams(List<KeepersSeeder[]> chunks, int ci, sqlite3_stmt stmt)
     {
         for (var i = 0; i < chunks[ci].Length; i++)
         {
@@ -149,41 +167,7 @@ public class DatabaseLowLvl
         }
     }
 
-    // public void LoadTopicsByChunksWithParameter()
-    // {
-    //     StartTimer();
-    //
-    //     var chunkSize = 32766 / 13;
-    //
-    //     var chunks = ChunkArray(_topics, chunkSize);
-    //
-    //     var sql = "INSERT INTO main.Topics (id, forum_id, name, info_hash, seeders, size, status, reg_time, seeders_updates_today, seeders_updates_days, keeping_priority, poster, seeder_last_seen) VALUES ";
-    //     var paramsPart = $"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),";
-    //
-    //     ConstructStatement(chunkSize, sql, paramsPart, out var stmt);
-    //
-    //     for (var i = 0; i < chunks.Count; i++)
-    //     {
-    //         if (i == chunks.Count - 1)
-    //         {
-    //             ConstructStatement(chunks[i].Length, sql, paramsPart, out var stmtLast);
-    //
-    //             BindKeeperParams(chunks, i, stmtLast);
-    //
-    //             ExecBindedStatement(stmtLast);
-    //         }
-    //         else
-    //         {
-    //             BindKeeperParams(chunks, i, stmt);
-    //
-    //             ExecBindedStatement(stmt);
-    //         }
-    //     }
-    //
-    //     StopTimer($"Insert all topics with chunk size {chunkSize}");
-    // }
-
-    private void BindKeeperParams(List<Topic[]> chunks, int ci, sqlite3_stmt stmt)
+    private void BindParams(List<Topic[]> chunks, int ci, sqlite3_stmt stmt)
     {
         for (var i = 0; i < chunks[ci].Length; i++)
         {
@@ -206,47 +190,45 @@ public class DatabaseLowLvl
     private void ConstructStatement(int chunkSize, string sql, string paramsPart, out sqlite3_stmt stmt)
     {
         var sb = new StringBuilder();
-            
+
         sb.Append(sql);
-        
-        for(var i = 0; i < chunkSize; i++)
+
+        for (var i = 0; i < chunkSize; i++)
             sb.Append(paramsPart);
 
         sb.Remove(sb.Length - 1, 1);
         sb.Append(';');
 
-        var rc = raw.sqlite3_prepare_v2(_connection, sb.ToString(), out stmt);
-        CheckRc(rc);
+        stmt = PrepareStatement(sb.ToString());
     }
-    
+
     public void LoadSeedersPreloaded()
     {
         var path = "C:\\Games\\webtlo-win-2.6.0-beta1\\webtlo-win\\nginx\\wtlo\\data\\seeders.sql";
-        
+
         LoadPreloaded(path);
     }
 
     public void LoadTopicsPreloaded()
     {
         var path = "C:\\Games\\webtlo-win-2.6.0-beta1\\webtlo-win\\nginx\\wtlo\\data\\topics.sql";
-        
+
         LoadPreloaded(path);
     }
-    
+
     private void LoadPreloaded(string path)
     {
         var sql = File.ReadAllText(path);
 
-        StartTimer();
+        Speedometer.Start();
 
         ExecuteSql(sql);
-        
-        StopTimer(path);
+
+        Speedometer.Stop(path);
     }
 
     private void SetPragmas()
     {
-
         ExecuteSql("PRAGMA synchronous=OFF;");
         ExecuteSql("PRAGMA journal_mode=OFF;");
         ExecuteSql("PRAGMA count_changes=OFF;");
@@ -255,13 +237,13 @@ public class DatabaseLowLvl
         ExecuteSql("PRAGMA cache_size=-16777216;");
         ExecuteSql("PRAGMA locking_mode = EXCLUSIVE;");
     }
-    
+
     public void Close()
     {
         CommitTransaction();
         Optimize();
     }
-    
+
     private void Truncate(string table) =>
         ExecuteSql($"delete from {table}");
 
@@ -270,7 +252,7 @@ public class DatabaseLowLvl
 
     private void CommitTransaction() =>
         ExecuteSql("commit;");
-    
+
     private void Optimize() =>
         ExecuteSql("PRAGMA optimize;");
 
@@ -278,7 +260,7 @@ public class DatabaseLowLvl
     {
         var chunks = new List<T[]>();
 
-        for (int i = 0; i < array.Length; i += chunkSize)
+        for (var i = 0; i < array.Length; i += chunkSize)
         {
             var chunk = new T[Math.Min(chunkSize, array.Length - i)];
             Array.Copy(array, i, chunk, 0, chunk.Length);

@@ -1,24 +1,23 @@
-﻿using System.Collections.Concurrent;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Formats.Tar;
 using System.IO.Compression;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+
+using NativeTloLibrary.Models;
+
 // ReSharper disable CommentTypo
 
-namespace TloSql;
+namespace NativeTloLibrary.StaticApi;
 
 public partial class SubsectionsYoba
 {
-    public async Task<(List<Topic> topics, List<KeepersSeeder> keepers)> Read()
+    public async Task<(List<Topic> topics, List<KeepersSeeder> keepers)> Read(Dictionary<long, string> keeperNames)
     {
+        Speedometer.Start();
         var httpClient = new HttpClient();
 
         const string statsUrl = "https://api.rutracker.cc/v1/static/pvc/f-all.tar";
 
         var tarReader = new TarReader(new MemoryStream(await httpClient.GetByteArrayAsync(statsUrl)));
-
-        var sw4 = Stopwatch.StartNew();
 
         var zippedBytes = new List<byte[]>();
 
@@ -32,21 +31,23 @@ public partial class SubsectionsYoba
             zippedBytes.Add(ms.ToArray());
         }
 
+        Speedometer.Stop("F-all скачан и распакован за");
+
+        Speedometer.Start();
+
         var topics = new List<Topic>();
         var keepers = new List<KeepersSeeder>();
         var lockObject = new object();
 
-        Parallel.ForEach(zippedBytes, (x) => ExecuteRead(x, ref topics, ref keepers, ref lockObject));
+        Parallel.ForEach(zippedBytes, (x) => ExecuteRead(x, keeperNames, ref topics, ref keepers, ref lockObject));
 
-        sw4.Stop();
-
-        Console.WriteLine(sw4.Elapsed);
+        Speedometer.Stop("F-all посчитан за");
 
         return (topics, keepers);
 
     }
 
-    private void ExecuteRead(byte[] zipped, ref List<Topic> globalTopics, ref List<KeepersSeeder> globalKeepers, ref object lockObject)
+    private void ExecuteRead(byte[] zipped, Dictionary<long, string> keeperNames, ref List<Topic> globalTopics, ref List<KeepersSeeder> globalKeepers, ref object lockObject)
     {
         using var ms1 = new MemoryStream(zipped);
         using var gzipArchive = new GZipStream(ms1, CompressionMode.Decompress);
@@ -54,7 +55,7 @@ public partial class SubsectionsYoba
         using var ms2 = new MemoryStream();
         gzipArchive.CopyTo(ms2);
 
-        Read(ms2.ToArray(), ref globalTopics, ref globalKeepers, ref lockObject);
+        Read(ms2.ToArray(), keeperNames,  ref globalTopics, ref globalKeepers, ref lockObject);
     }
 
     enum Place
@@ -78,7 +79,7 @@ public partial class SubsectionsYoba
     /// Охуеть какой быстрый непонятный десериализатор f-all
     /// </summary>
     /// <param name="chars"></param>
-    private void Read(byte[] chars, ref List<Topic> globalTopics, ref List<KeepersSeeder> globalKeepers, ref object lockObject)
+    private void Read(byte[] chars, Dictionary<long, string> keeperNames, ref List<Topic> globalTopics, ref List<KeepersSeeder> globalKeepers, ref object lockObject)
     {
         var topics = new List<Topic>();
         var keepers = new List<KeepersSeeder>();
@@ -271,10 +272,16 @@ public partial class SubsectionsYoba
                 case Place.Keepers:
                     if (currentKey == ',')
                     {
-                        keepers.Add(new KeepersSeeder {
-                            KeeperId = GetSubSequenceOfBytesAsLong(ref chars, indexOfStart, i - indexOfStart),
-                            TopicId = currentTopicId
-                        });
+                        var keeperId = GetSubSequenceOfBytesAsLong(ref chars, indexOfStart, i - indexOfStart);
+
+                        var keeperName = keeperNames[keeperId];
+
+                        keepers.Add(
+                            new KeepersSeeder {
+                                KeeperId = keeperId,
+                                TopicId = currentTopicId,
+                                KeeperName = keeperName
+                            });
 
                         // "result":{"1456361":[8,4,1702859387,596813824,1,[46916731,33209522,369429],1734834061
                         //                                                          |
@@ -287,25 +294,50 @@ public partial class SubsectionsYoba
                         indexOfStart = i + 1;
                     } else if (currentKey == ']')
                     {
-                        keepers.Add(new KeepersSeeder {
-                            KeeperId = GetSubSequenceOfBytesAsLong(ref chars, indexOfStart, i - indexOfStart),
-                            TopicId = currentTopicId
-                        });
+                        if (indexOfStart != i)
+                        {
+                            var keeperId = GetSubSequenceOfBytesAsLong(ref chars, indexOfStart, i - indexOfStart);
 
-                        // "result":{"1456361":[8,4,1702859387,596813824,1,[46916731,33209522,369429],1734834061
-                        //                                                                          |
-                        //                                                                       мы тут
+                            var keeperName = keeperNames[keeperId];
 
-                        // "result":{"1456361":[8,4,1702859387,596813824,1,[46916731,33209522,369429],1734834061
-                        //                                                                           |
-                        //                                                                     стали тут
+                            keepers.Add(new KeepersSeeder {
+                                KeeperId = keeperId,
+                                TopicId = currentTopicId,
+                                KeeperName = keeperName
+                            });
 
-                        // "result":{"1456361":[8,4,1702859387,596813824,1,[46916731,33209522,369429],1734834061
-                        //                                                                            |
-                        //                                                          на следующей итерации будем тут
+                            // "result":{"1456361":[8,4,1702859387,596813824,1,[46916731,33209522,369429],1734834061
+                            //                                                                          |
+                            //                                                                       мы тут
 
-                        i++;
-                        indexOfStart = i + 1;
+                            // "result":{"1456361":[8,4,1702859387,596813824,1,[46916731,33209522,369429],1734834061
+                            //                                                                           |
+                            //                                                                     стали тут
+
+                            // "result":{"1456361":[8,4,1702859387,596813824,1,[46916731,33209522,369429],1734834061
+                            //                                                                            |
+                            //                                                          на следующей итерации будем тут
+
+                            i++;
+                            indexOfStart = i + 1;
+                        }
+                        else
+                        {
+                            // "result":{"1456361":[],1734834061
+                            //                      |
+                            //                    мы тут
+
+                            // "result":{"1456361":[],1734834061
+                            //                       |
+                            //                    стали тут
+
+                            // "result":{"1456361":[],1734834061
+                            //                        |
+                            //        на следующей итерации будем тут
+
+                            i++;
+                            indexOfStart = i + 1;
+                        }
 
                         currentPlace = Place.SeederLastSeen;
                     }
@@ -442,7 +474,7 @@ public partial class SubsectionsYoba
     /// <returns>Число</returns>
     private static long GetSubSequenceOfBytesAsLong(ref byte[] bytes, int index, int length)
     {
-
+        // Эта хуйня экономит 10% времени выполнения
         long result = length switch {
             1 => ((char)bytes[index] - '0'),
 

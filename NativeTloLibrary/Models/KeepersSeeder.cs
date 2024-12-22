@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace TloSql;
+﻿namespace NativeTloLibrary.Models;
 
 public struct KeepersSeeder
 {
