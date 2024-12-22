@@ -1,7 +1,5 @@
-﻿using System.Configuration.Provider;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
-using System.Text.Json;
 
 using SQLitePCL;
 
@@ -9,19 +7,23 @@ namespace TloSql;
 
 public class DatabaseLowLvl
 {
-    private TloSql.KeepersSeeder[] _seeders = JsonSerializer.Deserialize<KeepersSeeder[]>(File.ReadAllText("C:\\Games\\webtlo-win-2.6.0-beta1\\webtlo-win\\nginx\\wtlo\\data\\seeders.json"))!;
-    private TloSql.Topic[] _topics = JsonSerializer.Deserialize<Topic[]>(File.ReadAllText("C:\\Games\\webtlo-win-2.6.0-beta1\\webtlo-win\\nginx\\wtlo\\data\\topics.json"))!;
-    
     private sqlite3 _connection;
 
     private Stopwatch _stopwatch = new Stopwatch();
 
+    /// <summary>
+    /// Сбрасывает и перезапускает таймер
+    /// </summary>
     private void StartTimer()
     {
         _stopwatch.Reset();
         _stopwatch.Start();
     }
 
+    /// <summary>
+    /// Останавливает таймер и пишет в консоль буквы
+    /// </summary>
+    /// <param name="text">Буквы которые писать</param>
     private void StopTimer(string text)
     {
         _stopwatch.Stop();
@@ -90,42 +92,42 @@ public class DatabaseLowLvl
     private void CheckRc(int rc)
     {
         if (rc != raw.SQLITE_OK && rc != raw.SQLITE_DONE)
-            throw new ProviderException(rc.ToString() + raw.sqlite3_errmsg(_connection).utf8_to_string());
+            throw new Exception(rc.ToString() + raw.sqlite3_errmsg(_connection).utf8_to_string());
     }
     
-    public void LoadSeedersByChunksWithParameter()
-    {
-        StartTimer();
-
-        var chunkSize = 32766 / 3;
-        
-        var chunks = ChunkArray(_seeders, chunkSize);
-
-        var sql = "INSERT INTO main.KeepersSeeders (topic_id, keeper_id, keeper_name) VALUES ";
-        var paramsPart = "(?, ?, ?),";
-        
-        ConstructStatement(chunkSize, sql, paramsPart, out var stmt);
-
-        for (var i = 0; i < chunks.Count; i++)
-        {
-            if (i == chunks.Count - 1)
-            {
-                ConstructStatement(chunks[i].Length, sql, paramsPart, out var stmtLast);
-                
-                BindSeederParams(chunks, i, stmtLast);
-
-                ExecBindedStatement(stmtLast);
-            }
-            else
-            {
-                BindSeederParams(chunks, i, stmt);
-
-                ExecBindedStatement(stmt);
-            }
-        }
-    
-        StopTimer($"Insert all seeders with chunk size {chunkSize}");
-    }
+    // public void LoadSeedersByChunksWithParameter()
+    // {
+    //     StartTimer();
+    //
+    //     var chunkSize = 32766 / 3;
+    //
+    //     var chunks = ChunkArray(_seeders, chunkSize);
+    //
+    //     var sql = "INSERT INTO main.KeepersSeeders (topic_id, keeper_id, keeper_name) VALUES ";
+    //     var paramsPart = "(?, ?, ?),";
+    //
+    //     ConstructStatement(chunkSize, sql, paramsPart, out var stmt);
+    //
+    //     for (var i = 0; i < chunks.Count; i++)
+    //     {
+    //         if (i == chunks.Count - 1)
+    //         {
+    //             ConstructStatement(chunks[i].Length, sql, paramsPart, out var stmtLast);
+    //
+    //             BindSeederParams(chunks, i, stmtLast);
+    //
+    //             ExecBindedStatement(stmtLast);
+    //         }
+    //         else
+    //         {
+    //             BindSeederParams(chunks, i, stmt);
+    //
+    //             ExecBindedStatement(stmt);
+    //         }
+    //     }
+    //
+    //     StopTimer($"Insert all seeders with chunk size {chunkSize}");
+    // }
 
     private void ExecBindedStatement(sqlite3_stmt stmt)
     {
@@ -147,56 +149,56 @@ public class DatabaseLowLvl
         }
     }
 
-    public void LoadTopicsByChunksWithParameter()
-    {
-        StartTimer();
-        
-        var chunkSize = 32766 / 13;
-        
-        var chunks = ChunkArray(_topics, chunkSize);
-    
-        var sql = "INSERT INTO main.Topics (id, forum_id, name, info_hash, seeders, size, status, reg_time, seeders_updates_today, seeders_updates_days, keeping_priority, poster, seeder_last_seen) VALUES ";
-        var paramsPart = $"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),";
-        
-        ConstructStatement(chunkSize, sql, paramsPart, out var stmt);
-
-        for (var i = 0; i < chunks.Count; i++)
-        {
-            if (i == chunks.Count - 1)
-            {
-                ConstructStatement(chunks[i].Length, sql, paramsPart, out var stmtLast);
-                
-                BindKeeperParams(chunks, i, stmtLast);
-
-                ExecBindedStatement(stmtLast);
-            }
-            else
-            {
-                BindKeeperParams(chunks, i, stmt);
-
-                ExecBindedStatement(stmt);
-            }
-        }
-        
-        StopTimer($"Insert all topics with chunk size {chunkSize}");
-    }
+    // public void LoadTopicsByChunksWithParameter()
+    // {
+    //     StartTimer();
+    //
+    //     var chunkSize = 32766 / 13;
+    //
+    //     var chunks = ChunkArray(_topics, chunkSize);
+    //
+    //     var sql = "INSERT INTO main.Topics (id, forum_id, name, info_hash, seeders, size, status, reg_time, seeders_updates_today, seeders_updates_days, keeping_priority, poster, seeder_last_seen) VALUES ";
+    //     var paramsPart = $"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),";
+    //
+    //     ConstructStatement(chunkSize, sql, paramsPart, out var stmt);
+    //
+    //     for (var i = 0; i < chunks.Count; i++)
+    //     {
+    //         if (i == chunks.Count - 1)
+    //         {
+    //             ConstructStatement(chunks[i].Length, sql, paramsPart, out var stmtLast);
+    //
+    //             BindKeeperParams(chunks, i, stmtLast);
+    //
+    //             ExecBindedStatement(stmtLast);
+    //         }
+    //         else
+    //         {
+    //             BindKeeperParams(chunks, i, stmt);
+    //
+    //             ExecBindedStatement(stmt);
+    //         }
+    //     }
+    //
+    //     StopTimer($"Insert all topics with chunk size {chunkSize}");
+    // }
 
     private void BindKeeperParams(List<Topic[]> chunks, int ci, sqlite3_stmt stmt)
     {
         for (var i = 0; i < chunks[ci].Length; i++)
         {
-            Bind(stmt, 13 * i + 1, chunks[ci][i].Id);
+            Bind(stmt, 13 * i + 1, chunks[ci][i].TopicId);
             Bind(stmt, 13 * i + 2, chunks[ci][i].ForumId);
             Bind(stmt, 13 * i + 3, chunks[ci][i].Name);
             Bind(stmt, 13 * i + 4, chunks[ci][i].InfoHash);
             Bind(stmt, 13 * i + 5, chunks[ci][i].Seeders);
-            Bind(stmt, 13 * i + 6, chunks[ci][i].Size);
-            Bind(stmt, 13 * i + 7, chunks[ci][i].Status);
+            Bind(stmt, 13 * i + 6, chunks[ci][i].TorSizeBytes);
+            Bind(stmt, 13 * i + 7, chunks[ci][i].TorStatus);
             Bind(stmt, 13 * i + 8, chunks[ci][i].RegTime);
             Bind(stmt, 13 * i + 9, chunks[ci][i].SeedersUpdatesToday);
             Bind(stmt, 13 * i + 10, chunks[ci][i].SeedersUpdatesDays);
             Bind(stmt, 13 * i + 11, chunks[ci][i].KeepingPriority);
-            Bind(stmt, 13 * i + 12, chunks[ci][i].Poster);
+            Bind(stmt, 13 * i + 12, chunks[ci][i].TopicPoster);
             Bind(stmt, 13 * i + 13, chunks[ci][i].SeederLastSeen);
         }
     }
